@@ -1,45 +1,73 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 import httpx
-#import os
+import os
 
+# Инициализация FastAPI приложения
 app = FastAPI()
 
-# 💡 Сюда вставь свой ключ
-DEEPAI_API_KEY = "dce4fd4d-8fce-4cd7-9166-cf85f215f268"
-DEEPAI_URL = "https://api.deepai.org/api/nsfw-detector"
+# Загрузка переменных окружения из .env файла
+load_dotenv()
+
+# Извлечение Hugging Face токена из окружения
+HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
+
+# Основной эндпоинт API: POST /moderate
 
 @app.post("/moderate")
 async def moderate_image(file: UploadFile = File(...)):
+    # Проверка MIME-типа файла
     if file.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
+    # Чтение содержимого файла в байты
+    image_bytes = await file.read()
+
+    # Базовые заголовки запроса
+    headers = {
+        "Content-Type": "application/octet-stream",
+    }
+
+    if HUGGINGFACE_TOKEN:
+        headers["Authorization"] = f"Bearer {HUGGINGFACE_TOKEN}"
+
     try:
-        # Создаём асинхронного клиента
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                DEEPAI_URL,
-                files={"image": (file.filename, await file.read())},
-                headers={"api-key": DEEPAI_API_KEY}
+                HUGGINGFACE_API_URL,
+                content=image_bytes,
+                headers=headers,
+                timeout=60.0 #увеличенный таймаут на случай прогрева модели(чтобы дать подели проснуться)
             )
 
-        # Проверяем, что всё прошло успешно
-        if response.status_code != 200:
-            print("Код ответа DeepAI:", response.status_code)
-            print("Тело ответа DeepAI:", response.text)
-            raise HTTPException(status_code=500, detail="DeepAI error")
+            # Обработка ошибок ответа
+            if response.status_code != 200:
+                print("⚠️ Hugging Face response code:", response.status_code)
+                print("⚠️ Hugging Face response text:", response.text)
+                raise HTTPException(status_code=500, detail="Hugging Face API error")
 
-        data = response.json()
+            # Десериализация JSON-ответа от модели
+            results = response.json()
+            print("Ответ HF:", results)
 
-        # Извлекаем nsfw_score
-        nsfw_score = data.get("output", {}).get("nsfw_score", 0)
+            # Извлекаем nsfw_score
+            nsfw_score = 0.0
+            for item in results:
+                if item.get("label") == "nsfw":
+                    nsfw_score = item.get("score", 0.0)
+                    break
 
-        if nsfw_score > 0.7:
-            return {"status": "REJECTED", "reason": "NSFW content"}
+            print("🔍 NSFW Score:", nsfw_score)
 
-        return {"status": "OK"}
+            if nsfw_score > 0.7:
+                return {"status": "REJECTED", "reason": "NSFW content"}
+            else:
+                return {"status": "OK"}
+
 
     except Exception as e:
-        print("Ошибка при обращении к DeepAI:", e)
+        # Обработка непредвиденных ошибок
+        print("🛑 Внутренняя ошибка:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
