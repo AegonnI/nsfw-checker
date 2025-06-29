@@ -1,5 +1,4 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import httpx
 import os
@@ -15,7 +14,6 @@ HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
 
 # Основной эндпоинт API: POST /moderate
-
 @app.post("/moderate")
 async def moderate_image(file: UploadFile = File(...)):
     # Проверка MIME-типа файла
@@ -59,7 +57,7 @@ async def moderate_image(file: UploadFile = File(...)):
                     nsfw_score = item.get("score", 0.0)
                     break
 
-            print("🔍 NSFW Score:", nsfw_score)
+            print("NSFW Score:", nsfw_score)
 
             if nsfw_score > 0.7:
                 return {"status": "REJECTED", "reason": "NSFW content"}
