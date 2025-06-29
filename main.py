@@ -11,6 +11,11 @@ load_dotenv()
 
 # Извлечение Hugging Face токена из окружения
 HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
+
+# Проверка наличия токена — при старте приложения
+if not HUGGINGFACE_TOKEN:
+    print("⚠️ Внимание: переменная HF_TOKEN не найдена. Запросы к Hugging Face могут не работать. Создайте файл .env и поместите туда свой токен")
+
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
 
 # Основной эндпоинт API: POST /moderate
